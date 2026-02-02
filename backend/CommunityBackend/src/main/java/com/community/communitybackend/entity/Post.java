@@ -6,27 +6,27 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("users")
-public class Users {
+@TableName("post")
+public class Post {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long userId;
 
-    private String username;
+    private String content;
 
-    private String nickname;
+    private String images;
 
-    private String password;
+    private String category;
 
-    private String avatar;
+    private Boolean isAnonymous;
 
-    private String phone;
+    private Integer viewCount;
 
-    private String email;
+    private Integer likeCount;
 
-    private String role;
+    private Integer commentCount;
 
     private Integer status;
 

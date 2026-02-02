@@ -2,21 +2,7 @@
 这是是一个校园社团系统
 
 
-
-Servlet 烧砖 砍树 打地基 装修
-JDBC GET SET
-
-
-Springboot 有烧砖 地基     装修
-@注释 Annotation
-@Component 组件
-@Service 业务逻辑层 MVC
-@Repository DAO 
-@RestController 控制层 告诉spring 这类是"处理网页请求API"
-
-处理网页
-@ReuestMapping("/path") 定义访问路径
-@GetMapping/@PostMapping 
-@RequetParam 接受URL 参数
-
-
+明日任务
+1.自己理解我创建的所有实体类的意义
+2.自己理解为什么要创建init.sql脚本？
+3.没事情的时候自己去查看一下MybaitsPlus的文档，了解整个工具都有什么功能和优势

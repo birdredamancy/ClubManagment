@@ -6,29 +6,19 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("users")
-public class Users {
+@TableName("chat_room")
+public class ChatRoom {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private Long userId;
+    private String roomName;
 
-    private String username;
+    private String roomType;
 
-    private String nickname;
-
-    private String password;
+    private Long ownerId;
 
     private String avatar;
-
-    private String phone;
-
-    private String email;
-
-    private String role;
-
-    private Integer status;
 
     private LocalDateTime createdAt;
 
