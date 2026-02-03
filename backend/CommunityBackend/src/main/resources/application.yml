@@ -31,6 +31,11 @@ spring:
       max-file-size: 10MB
       max-request-size: 10MB
 
+# JWT 配置
+jwt:
+  secret: your-256-bit-secret-key-here-must-be-at-least-32-characters-long #需要生成一个随机密钥（让AI生成也可以）
+  expiration: 86400000  # 24小时（毫秒）
+
 # MyBatis-Plus 配置
 mybatis-plus:
   configuration:
