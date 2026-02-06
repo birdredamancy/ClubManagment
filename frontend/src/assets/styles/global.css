@@ -1,0 +1,70 @@
+/* 全局样式 - 移动端优先 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+/* 移动端容器 */
+.mobile-container {
+  max-width: 500px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background-color: #f5f7fa;
+}
+
+/* 页面内边距 */
+.page-padding {
+  padding: 16px;
+}
+
+/* 卡片样式 */
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* 安全区域适配（iOS） */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 隐藏滚动条但保持可滚动 */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 文字截断 */
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-ellipsis-2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}

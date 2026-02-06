@@ -119,32 +119,87 @@ CREATE TABLE user_profile (
     bio         VARCHAR(500),                        -- 个人简介/签名
     major       VARCHAR(100),                        -- 专业
     grade       VARCHAR(20),                         -- 年级，例如 "2024"
+    college     VARCHAR(100),                        -- 学院
+    birthday    VARCHAR(20),                         -- 生日
+    qq_number   VARCHAR(20),                         -- QQ号
+    wechat_id   VARCHAR(50),                         -- 微信号
+
+    -- 关联账户状态
+    wechat_linked   BOOLEAN DEFAULT FALSE,           -- 微信是否绑定
+    qq_linked       BOOLEAN DEFAULT FALSE,           -- QQ是否绑定
+    github_linked   BOOLEAN DEFAULT FALSE,           -- GitHub是否绑定
+
+    -- 邮箱验证和安全设置
+    email_verified      BOOLEAN DEFAULT FALSE,       -- 邮箱是否验证
+    password_updated_at TIMESTAMP,                   -- 密码最后修改时间
+    two_factor_enabled  BOOLEAN DEFAULT FALSE,       -- 两步验证是否启用
+    sms_verify_enabled  BOOLEAN DEFAULT FALSE,       -- 短信验证是否启用
+
+    -- 通知设置
+    notify_post_reply     BOOLEAN DEFAULT TRUE,      -- 帖子回复通知
+    notify_comment_reply  BOOLEAN DEFAULT TRUE,      -- 评论回复通知
+    notify_mention        BOOLEAN DEFAULT TRUE,      -- @提及通知
+    notify_club_activity  BOOLEAN DEFAULT TRUE,      -- 社团活动通知
+    notify_system         BOOLEAN DEFAULT TRUE,      -- 系统通知
+
+    -- 邮件设置
+    email_system_notify   BOOLEAN DEFAULT TRUE,      -- 系统通知邮件
+    email_activity_remind BOOLEAN DEFAULT TRUE,      -- 活动提醒邮件
+    email_weekly_digest   BOOLEAN DEFAULT FALSE,     -- 周报邮件
+
+    -- 隐私设置
+    public_profile        BOOLEAN DEFAULT TRUE,      -- 公开个人资料
+    show_online           BOOLEAN DEFAULT TRUE,      -- 显示在线状态
+    allow_message         BOOLEAN DEFAULT TRUE,      -- 允许私信
+
+    -- 界面设置
+    dark_mode             BOOLEAN DEFAULT FALSE,     -- 深色模式
+    compact_mode          BOOLEAN DEFAULT FALSE,     -- 紧凑模式
+
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. 校园墙帖子表（核心业务表）
+-- 3. 社团表（存储社团信息）
+CREATE TABLE club (
+    id            BIGSERIAL PRIMARY KEY,
+    name          VARCHAR(100) NOT NULL,             -- 社团名称
+    description   TEXT,                              -- 社团简介
+    color         VARCHAR(20) DEFAULT '#165dff',     -- 社团主题色（用于前端标签显示）
+    avatar        VARCHAR(500),                      -- 社团头像/Logo URL
+    owner_id      BIGINT REFERENCES users(user_id),  -- 社团负责人
+    member_count  INT DEFAULT 0,                     -- 成员数量（冗余字段）
+    post_count    INT DEFAULT 0,                     -- 帖子数量（冗余字段）
+    status        SMALLINT DEFAULT 1,                -- 状态：1正常 0已禁用
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. 校园墙帖子表（核心业务表）
 CREATE TABLE post (
     id            BIGSERIAL PRIMARY KEY,
     user_id       BIGINT NOT NULL REFERENCES users(user_id),  -- 发帖人（外键关联users表）
+    title         VARCHAR(200),                      -- 帖子标题
     content       TEXT NOT NULL,                     -- 帖子正文（TEXT类型不限长度）
-    images        TEXT,                              -- 图片URL列表，用JSON数组格式存储，例如 '["url1","url2"]'
-    category      VARCHAR(30) DEFAULT 'general',     -- 分类：general(日常)/confession(表白)/lost_found(失物招领)/trade(二手)/help(求助)
+    images        TEXT,                              -- 图片URL列表，用逗号分隔
+    club_id       BIGINT REFERENCES club(id),        -- 所属社团ID
+    tags          VARCHAR(500),                      -- 标签，用逗号分隔
     is_anonymous  BOOLEAN DEFAULT FALSE,             -- 是否匿名：TRUE匿名发布，列表页隐藏发布者信息
     view_count    INT DEFAULT 0,                     -- 浏览次数（冗余字段，用Redis计数后同步过来）
     like_count    INT DEFAULT 0,                     -- 点赞数（冗余字段，方便按热度排序，不用每次COUNT查询）
     comment_count INT DEFAULT 0,                     -- 评论数（同上，冗余字段提升查询性能）
     status        SMALLINT DEFAULT 1,                -- 状态：1正常 0已删除(软删除) 2审核中
+    pinned        BOOLEAN DEFAULT FALSE,             -- 是否置顶
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 帖子表索引：按「谁的帖子」「哪个分类」「发布时间倒序」查询非常频繁，所以加索引
+-- 帖子表索引：按「谁的帖子」「哪个社团」「发布时间倒序」查询非常频繁，所以加索引
 CREATE INDEX idx_post_user_id ON post(user_id);
-CREATE INDEX idx_post_category ON post(category);
+CREATE INDEX idx_post_club_id ON post(club_id);
 CREATE INDEX idx_post_created_at ON post(created_at DESC);
 
--- 4. 评论表（支持二级评论：顶级评论 + 回复）
+-- 5. 评论表（支持二级评论：顶级评论 + 回复）
 --    parent_id=0 表示顶级评论（直接评论帖子）
 --    parent_id=某个评论id 表示回复那条评论
 --    这种设计叫「邻接表」，是最简单的树形结构实现方式
@@ -162,7 +217,7 @@ CREATE TABLE comment (
 -- 查询某个帖子的所有评论是最常见的操作，所以给 post_id 加索引
 CREATE INDEX idx_comment_post_id ON comment(post_id);
 
--- 5. 帖子点赞表（记录"谁给哪个帖子点了赞"）
+-- 6. 帖子点赞表（记录"谁给哪个帖子点了赞"）
 --    UNIQUE(post_id, user_id) 保证同一个人对同一个帖子只能点赞一次
 --    实际业务中点赞状态会先存Redis（快），再异步同步到这张表（持久化）
 CREATE TABLE post_like (
@@ -173,7 +228,7 @@ CREATE TABLE post_like (
     UNIQUE(post_id, user_id)                               -- 联合唯一：防止重复点赞
 );
 
--- 6. 聊天室表（私聊和群聊共用一张表，通过 room_type 区分）
+-- 7. 聊天室表（私聊和群聊共用一张表，通过 room_type 区分）
 --    私聊：room_type='PRIVATE'，两个人自动创建，room_name 为空
 --    群聊：room_type='GROUP'，有群名、群主、群头像
 CREATE TABLE chat_room (
@@ -186,7 +241,7 @@ CREATE TABLE chat_room (
     updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 7. 聊天室成员表（多对多关系的中间表：一个用户可以在多个聊天室，一个聊天室有多个用户）
+-- 8. 聊天室成员表（多对多关系的中间表：一个用户可以在多个聊天室，一个聊天室有多个用户）
 --    这是经典的「多对多关系」处理方式：用一张中间表来关联两张主表
 CREATE TABLE chat_room_member (
     id          BIGSERIAL PRIMARY KEY,
@@ -200,7 +255,7 @@ CREATE TABLE chat_room_member (
 -- 查询「某个用户参与了哪些聊天室」非常频繁，所以给 user_id 加索引
 CREATE INDEX idx_member_user_id ON chat_room_member(user_id);
 
--- 8. 聊天消息表（所有聊天记录都存在这一张表里，通过 room_id 区分是哪个聊天室的消息）
+-- 9. 聊天消息表（所有聊天记录都存在这一张表里，通过 room_id 区分是哪个聊天室的消息）
 CREATE TABLE chat_message (
     id          BIGSERIAL PRIMARY KEY,
     room_id     BIGINT NOT NULL REFERENCES chat_room(id),  -- 属于哪个聊天室
@@ -215,7 +270,7 @@ CREATE TABLE chat_message (
 CREATE INDEX idx_message_room_id ON chat_message(room_id);
 CREATE INDEX idx_message_created_at ON chat_message(created_at DESC);
 
--- 9. AI 摘要表（存储 AI 对校园墙帖子的自动总结结果）
+-- 10. AI 摘要表（存储 AI 对校园墙帖子的自动总结结果）
 --    由定时任务或管理员手动触发生成，调用外部AI大模型API（如DeepSeek）
 CREATE TABLE ai_summary (
     id               BIGSERIAL PRIMARY KEY,
@@ -230,3 +285,119 @@ CREATE TABLE ai_summary (
 
 CREATE INDEX idx_summary_type ON ai_summary(summary_type);
 CREATE INDEX idx_summary_created_at ON ai_summary(created_at DESC);
+
+
+-- ============================================
+-- 初始化测试数据
+-- ============================================
+
+-- 插入社团数据
+INSERT INTO club (name, description, color, member_count, post_count) VALUES
+('篮球社', '热爱篮球运动的同学们聚集地，每周组织训练和比赛', '#ff7d00', 56, 12),
+('摄影社', '用镜头记录校园美好瞬间，分享摄影技巧和作品', '#00b42a', 38, 8),
+('读书会', '共同阅读，分享思想，每周推荐优质书籍', '#165dff', 42, 15),
+('音乐社', '唱歌、乐器、作曲，音乐爱好者的天堂', '#722ed1', 65, 10),
+('编程社', '代码改变世界，一起学习编程技术', '#f53f3f', 48, 20);
+
+-- 插入测试用户
+INSERT INTO users (user_id, username, nickname, password, role, status) VALUES
+(1001, 'zhangsan', '张三', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'USER', 1),
+(1002, 'lisi', '李四', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'USER', 1),
+(1003, 'xiaoming', '小明', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'USER', 1),
+(1004, 'xiaohong', '小红', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'USER', 1),
+(1005, 'wangwu', '王五', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'USER', 1);
+
+-- 插入测试帖子
+INSERT INTO post (user_id, title, content, club_id, tags, view_count, like_count, comment_count, pinned, status, created_at, updated_at) VALUES
+(1001, '篮球社本周六下午3点体育馆集合训练', '各位社员注意啦！本周六（2月8日）下午3点在体育馆集合，进行常规训练。请大家准时参加，记得带好运动装备和水杯。本次训练内容包括：基础运球、投篮练习、团队配合战术演练。新加入的同学也不用担心，我们会有老成员带着一起练习。期待大家的参与！', 1, '活动通知,训练', 1520, 45, 23, true, 1, NOW() - INTERVAL '10 minutes', NOW() - INTERVAL '10 minutes'),
+(1002, '摄影社招新啦！欢迎热爱摄影的同学加入', '摄影社2024年春季招新开始了！无论你是摄影小白还是大神，只要你热爱摄影，欢迎加入我们的大家庭。我们定期组织外拍活动、摄影技巧分享会、后期处理教学等。加入我们，一起用镜头记录校园的美好瞬间！报名方式：扫描下方二维码或直接私信社长。', 2, '招新,摄影', 3200, 89, 89, false, 1, NOW() - INTERVAL '30 minutes', NOW() - INTERVAL '30 minutes'),
+(1003, '读书会本周推荐：《人类简史》', '本周读书会为大家推荐以色列历史学家尤瓦尔·赫拉利的经典著作《人类简史》，欢迎大家阅读并参与讨论。这本书从认知革命、农业革命、科学革命三个角度，讲述了人类从东非的一个普通动物到地球主宰的进化历程。本周六下午2点在图书馆三楼研讨室，我们将一起分享读书心得。', 3, '书籍推荐', 890, 32, 45, false, 1, NOW() - INTERVAL '1 hour', NOW() - INTERVAL '1 hour'),
+(1004, '音乐社周末弹唱会，欢迎参加', '音乐社本周日晚上7点将在小剧场举办一场小型弹唱会，届时将有多位社员带来精彩的吉他弹唱表演。曲目涵盖流行、民谣、摇滚等多种风格。欢迎所有热爱音乐的同学前来观看，也欢迎想要上台表演的同学提前报名！', 4, '活动,弹唱会', 650, 28, 15, false, 1, NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours'),
+(1005, '编程社算法竞赛培训班开始报名', '编程社将于下周开始举办算法竞赛培训班，面向有一定编程基础、想要参加ACM/蓝桥杯等竞赛的同学。培训内容包括：基础数据结构、常见算法、动态规划、图论等。每周两次课程，由有竞赛经验的学长学姐授课。名额有限，先到先得！', 5, '竞赛,培训', 1200, 56, 32, false, 1, NOW() - INTERVAL '3 hours', NOW() - INTERVAL '3 hours'),
+(1001, '失物招领：图书馆捡到一个黑色钱包', '今天下午在图书馆二楼自习室捡到一个黑色钱包，里面有校园卡和一些现金。请失主尽快联系我认领。联系方式：微信 zhangsan123。', NULL, '失物招领', 320, 5, 8, false, 1, NOW() - INTERVAL '4 hours', NOW() - INTERVAL '4 hours'),
+(1002, '求助：有没有同学有《高等数学》第七版的教材', '急需一本《高等数学》同济第七版上册，有没有学长学姐有闲置的可以转让或借用？可以有偿购买，价格好商量。谢谢大家！', NULL, '求助,教材', 180, 3, 12, false, 1, NOW() - INTERVAL '5 hours', NOW() - INTERVAL '5 hours');
+
+-- 插入测试评论
+INSERT INTO comment (post_id, user_id, parent_id, content, like_count, status) VALUES
+(1, 1002, 0, '收到！周六见！', 5, 1),
+(1, 1003, 0, '我是新加入的，期待和大家一起训练', 3, 1),
+(1, 1004, 1, '李四你来接我呗', 2, 1),
+(2, 1005, 0, '我想加入！请问需要自备相机吗？', 8, 1),
+(2, 1003, 4, '手机也可以的，主要是热爱摄影就行', 4, 1),
+(3, 1001, 0, '这本书太棒了，强烈推荐！', 6, 1);
+
+-- 插入聊天频道（社团群聊）
+INSERT INTO chat_room (room_name, room_type, owner_id) VALUES
+('常规频道', 'channel', NULL),
+('篮球社群聊', 'channel', NULL),
+('摄影社群聊', 'channel', NULL);
+
+
+-- ============================================
+-- user_profile 表结构升级脚本
+-- 执行此脚本为现有数据库添加新字段
+-- ============================================
+
+-- 添加新的基本信息字段
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS college VARCHAR(100);
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS birthday VARCHAR(20);
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS qq_number VARCHAR(20);
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS wechat_id VARCHAR(50);
+
+-- 添加关联账户状态字段
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS wechat_linked BOOLEAN DEFAULT FALSE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS qq_linked BOOLEAN DEFAULT FALSE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS github_linked BOOLEAN DEFAULT FALSE;
+
+-- 添加邮箱验证和安全设置字段
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMP;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS sms_verify_enabled BOOLEAN DEFAULT FALSE;
+
+-- 添加通知设置字段
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS notify_post_reply BOOLEAN DEFAULT TRUE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS notify_comment_reply BOOLEAN DEFAULT TRUE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS notify_mention BOOLEAN DEFAULT TRUE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS notify_club_activity BOOLEAN DEFAULT TRUE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS notify_system BOOLEAN DEFAULT TRUE;
+
+-- 添加邮件设置字段
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS email_system_notify BOOLEAN DEFAULT TRUE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS email_activity_remind BOOLEAN DEFAULT TRUE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS email_weekly_digest BOOLEAN DEFAULT FALSE;
+
+-- 添加隐私设置字段
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS public_profile BOOLEAN DEFAULT TRUE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS show_online BOOLEAN DEFAULT TRUE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS allow_message BOOLEAN DEFAULT TRUE;
+
+-- 添加界面设置字段
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS dark_mode BOOLEAN DEFAULT FALSE;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS compact_mode BOOLEAN DEFAULT FALSE;
+
+-- 添加字段注释（可选，PostgreSQL语法）
+COMMENT ON COLUMN user_profile.college IS '学院';
+COMMENT ON COLUMN user_profile.birthday IS '生日';
+COMMENT ON COLUMN user_profile.qq_number IS 'QQ号';
+COMMENT ON COLUMN user_profile.wechat_id IS '微信号';
+COMMENT ON COLUMN user_profile.wechat_linked IS '微信是否绑定';
+COMMENT ON COLUMN user_profile.qq_linked IS 'QQ是否绑定';
+COMMENT ON COLUMN user_profile.github_linked IS 'GitHub是否绑定';
+COMMENT ON COLUMN user_profile.email_verified IS '邮箱是否验证';
+COMMENT ON COLUMN user_profile.password_updated_at IS '密码最后修改时间';
+COMMENT ON COLUMN user_profile.two_factor_enabled IS '两步验证是否启用';
+COMMENT ON COLUMN user_profile.sms_verify_enabled IS '短信验证是否启用';
+COMMENT ON COLUMN user_profile.notify_post_reply IS '帖子回复通知';
+COMMENT ON COLUMN user_profile.notify_comment_reply IS '评论回复通知';
+COMMENT ON COLUMN user_profile.notify_mention IS '@提及通知';
+COMMENT ON COLUMN user_profile.notify_club_activity IS '社团活动通知';
+COMMENT ON COLUMN user_profile.notify_system IS '系统通知';
+COMMENT ON COLUMN user_profile.email_system_notify IS '系统通知邮件';
+COMMENT ON COLUMN user_profile.email_activity_remind IS '活动提醒邮件';
+COMMENT ON COLUMN user_profile.email_weekly_digest IS '周报邮件';
+COMMENT ON COLUMN user_profile.public_profile IS '公开个人资料';
+COMMENT ON COLUMN user_profile.show_online IS '显示在线状态';
+COMMENT ON COLUMN user_profile.allow_message IS '允许私信';
+COMMENT ON COLUMN user_profile.dark_mode IS '深色模式';
+COMMENT ON COLUMN user_profile.compact_mode IS '紧凑模式';

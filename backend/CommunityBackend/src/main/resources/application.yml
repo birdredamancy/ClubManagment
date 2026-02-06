@@ -5,11 +5,11 @@ spring:
   application:
     name: CommunityBackend
 
-  # PostgreSQL 数据库配置
+  # PostgreSQL 数据库配置 dev环境
   datasource:
-    url: jdbc:postgresql://localhost:5432/community_db
+    url: jdbc:postgresql://mcfwq.ddns.net:5432/community_db
     username: postgres
-    password: your_password
+    password: Heyh02210
     driver-class-name: org.postgresql.Driver
 
   # Redis 配置

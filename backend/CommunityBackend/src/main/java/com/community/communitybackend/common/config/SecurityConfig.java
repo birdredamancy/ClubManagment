@@ -14,10 +14,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 /**
  * Spring Security 配置
- * - 关闭CSRF（前后端分离项目不需要）
- * - 配置无状态Session（使用JWT，不需要Session）
- * - 放行登录注册接口，其他接口需要认证
- * - 注入JWT过滤器
+ * 关闭CSRF（前后端分离项目不需要）
+ * 配置无状态Session（使用JWT，不需要Session）
+ * 放行登录注册接口，其他接口需要认证
+ * 注入JWT过滤器
  */
 @Configuration
 @EnableWebSecurity
@@ -29,12 +29,20 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                // 禁用CSRF 前后端分离使用JWT，不需要CSRF保护
+                .csrf(csrf -> csrf.disable())
                 // 无状态Session
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // 请求授权配置
                 .authorizeHttpRequests(auth -> auth
                         // 放行登录注册接口
                         .requestMatchers("/api/auth/**").permitAll()
+                        // 放行帖子列表、详情和评论（公开访问）
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/post/list").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/post/{id}").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/post/{id}/comments").permitAll()
+                        // 放行社团列表（公开访问）
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/club/**").permitAll()
                         // 放行错误页面
                         .requestMatchers("/error").permitAll()
                         // 其他请求需要认证

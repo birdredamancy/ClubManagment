@@ -14,11 +14,15 @@ public class Post {
 
     private Long userId;
 
+    private String title;
+
     private String content;
 
     private String images;
 
-    private String category;
+    private Long clubId;
+
+    private String tags;
 
     private Boolean isAnonymous;
 
@@ -29,6 +33,8 @@ public class Post {
     private Integer commentCount;
 
     private Integer status;
+
+    private Boolean pinned;
 
     private LocalDateTime createdAt;
 

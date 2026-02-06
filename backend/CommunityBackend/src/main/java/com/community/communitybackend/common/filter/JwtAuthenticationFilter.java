@@ -6,6 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,12 +20,16 @@ import java.util.Collections;
 /**
  * JWT认证过滤器
  * 从请求头中提取Token，验证通过后将用户信息写入SecurityContext
+ * 同时验证Token是否在Redis中存在（支持主动登出）
  */
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtils jwtUtils;
+    private final StringRedisTemplate redisTemplate;
+
+    private static final String TOKEN_PREFIX = "user:token:";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -34,19 +39,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = resolveToken(request);
 
         if (StringUtils.hasText(token) && jwtUtils.validateToken(token)) {
-            Long userId = jwtUtils.getUserIdFromToken(token);
-            String username = jwtUtils.getUsernameFromToken(token);
-            String role = jwtUtils.getRoleFromToken(token);
+            // 检查Token是否在Redis中存在（登出后Token会从Redis删除）
+            Boolean exists = redisTemplate.hasKey(TOKEN_PREFIX + token);
+            if (Boolean.TRUE.equals(exists)) {
+                Long userId = jwtUtils.getUserIdFromToken(token);
+                String role = jwtUtils.getRoleFromToken(token);
 
-            // 构建认证对象，principal存userId，credentials存token
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(
-                            userId,
-                            null,
-                            Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
-                    );
+                // 构建认证对象，principal存userId
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userId,
+                                null,
+                                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
+                        );
 
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
         }
 
         filterChain.doFilter(request, response);
